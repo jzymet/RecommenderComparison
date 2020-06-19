@@ -46,9 +46,9 @@ class RatingsData:
         :param item_name: name of item to use a seed
         :param top_n: number of recommended items to print
         """
-        print(self.correlations(item_name, 50).sort_values(by = 'Correlation', ascending=False).head(top_n))
+        print(self._correlations(item_name, 50).sort_values(by = 'Correlation', ascending=False).head(top_n))
 
-    def correlations(self, item_name: str, minimum_ratings: int) -> pd.Series:
+    def _correlations(self, item_name: str, minimum_ratings: int) -> pd.Series:
         """returns an item's correlation with all other item having at least minimum_ratings rating; drops missing values
         :param item_id: number to which an item is indexed
         :param minimum_ratings: minimum number of ratings an item must have
@@ -70,7 +70,7 @@ class RatingsData:
         
         return similarity_vector
         
-    def cosine_similarities(self, item_name: str, minimum_ratings: int) -> pd.Series:
+    def _cosine_similarities(self, item_name: str, minimum_ratings: int) -> pd.Series:
         """returns an item's correlation with all other item having at least minimum_ratings rating; drops missing values
         :param item_id: number to which an item is indexed
         :param minimum_ratings: minimum number of ratings an item must have
