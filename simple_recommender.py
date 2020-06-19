@@ -70,3 +70,31 @@ class RatingsData:
         
         return similarity_vector
         
+    def cosine_similarities(self, item_name: str, minimum_ratings: int) -> pd.Series:
+        """returns an item's correlation with all other item having at least minimum_ratings rating; drops missing values
+        :param item_id: number to which an item is indexed
+        :param minimum_ratings: minimum number of ratings an item must have
+        """
+        #but the cold start problem!
+
+        #vector of ratings for given item, with empty cells filled in with zero, and then with centering applied
+        item_matrix: DataFrame = self._df.pivot_table(index = self._user, columns = self._item, values = self._rating)
+        item_matrix.fillna(0, inplace = True)
+       #for i in range(1, len(item_matrix.loc[:, 1])+1):
+       #        item_matrix.loc[i, :] = item_matrix.loc[i, :] - item_matrix.loc[i, :].mean()
+       #print(item_matrix)
+        item_count = len(item_matrix.loc[1, :])
+        item_ratings = item_matrix[self._title_to_item[item_name]]
+
+        #matrix of cosine similarities between given item and other items
+        similarity_list = []
+        title_list = []
+        for col in item_matrix.columns:
+            similarity_list.append(1 - distance.cosine(item_ratings, item_matrix.loc[:, col]))
+            title_list.append(self._item_to_title[col])
+        similarity_vector = DataFrame({'Similarity': similarity_list, 'Title': title_list, 'Ratings_count': self._ratings['Number_of_ratings']})
+
+        #same matrix, but subtracting all items with fewer than minimum_ratings
+        similarity_vector = similarity_vector[similarity_vector['Ratings_count'] > minimum_ratings]
+        
+        return similarity_vector
