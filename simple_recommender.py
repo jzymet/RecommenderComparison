@@ -2,7 +2,6 @@ import pandas as pd
 from pandas import DataFrame
 import numpy as np
 from scipy.spatial import distance
-from sklearn.metrics import mean_squared_error
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -21,7 +20,7 @@ def load_dataframe(path: str = DEFAULT_MOVIE_CSV) -> pd.DataFrame:
 class RatingsData:
     """object for storing data for user ratings of items"""
 
-    def __init__(self, df: DataFrame, user_id_col: str, item_id_col: str,  title_col: str, rating_col: str):
+    def __init__(self, df: DataFrame, user_id_col: str, item_id_col: str,  title_col: str, rating_col: str, binary: bool):
         """
         :param df: dataframe
         :param user_id_col: column title for user ID
@@ -45,7 +44,20 @@ class RatingsData:
 
         #matrix of user ratings of each item
         self._item_matrix: DataFrame = self._df.pivot_table(index = self._user, columns = self._item, values = self._rating)
+        print(self._item_matrix)
 
+        #splitting the user-ratings matrix into training (80%) and test (20%)
+        held_out_count = int(len(self._item_matrix)/5)
+        self._held_out_matrix: DataFrame = self._item_matrix.loc[:held_out_count, :]
+        self._item_matrix: DataFrame = self._item_matrix.loc[(held_out_count+1):len(self._item_matrix), :]
+        print(self._held_out_matrix)
+        print(self._item_matrix)
+
+        ###if ratings data, convert held out users' ratings to 1's if rating is greater than 4, else convert to 0 
+        if not binary:
+            self._held_out_matrix = pd.DataFrame(np.where(self._held_out_matrix.values >= 4, 1, 0), self._held_out_matrix.index)
+        print(self._held_out_matrix) 
+        
         #list of titles for each item in item matrix
         self._title_list = []
         for col in self._item_matrix.columns:
@@ -95,7 +107,7 @@ class RatingsData:
         #but the cold start problem!
 
         #vector of ratings for given item, with empty cells filled in with zero, and then with centering applied
-        self._item_matrix.fillna(0, inplace = True)
+        self._item_matrix.fillna(2.5, inplace = True)
        #for i in range(1, len(item_matrix.loc[:, 1])+1):
        #        self._item_matrix.loc[i, :] = item_matrix.loc[i, :] - item_matrix.loc[i, :].mean()
        #print(self._item_matrix)
