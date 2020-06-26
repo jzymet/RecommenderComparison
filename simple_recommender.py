@@ -133,7 +133,7 @@ class RatingsData:
                     print("Seed for recommendation: %s" % self._item_to_title[movId])
                     recommendations = self.recommend_items(self._item_to_title[movId], k)
                     print("Precision: %s" % self.average_precision(recommendations, current_user))
-                    APs.append(self.average_precision(recommendations, current_user)) #MAPs, not average precisions
+                    APs.append(self.average_precision(recommendations, current_user))
             userAPs.append(sum(APs)/k)
         print(userAPs)
         MAP = sum(userAPs)/len(self._held_out_matrix)
