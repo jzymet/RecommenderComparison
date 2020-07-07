@@ -75,6 +75,21 @@ class RatingsData:
         recommendations = dist(item_name, 50).sort_values(by = 'Similarity', ascending = False).head(top_n)
         return recommendations
 
+    def recommend_items_by_content(self, item_name: str, top_n: int = 5) -> pd.DataFrame:
+        """
+        prints top_n recommended movies based on metadata
+        :param item_name: name of item to use a seed
+        :param top_n: number of recommended items to print
+        """
+        #elaborate "metadata" in the above
+        
+        if distance_metric == "corr": dist = self._correlations
+        elif distance_metric == "cos": dist = self._cosine_similarities
+        else: raise ValueError("The distance heuristic must be 'corr', for correlation, or 'cos', for cosine similarity.")
+
+        recommendations = dist(item_name, 50).sort_values(by = 'Similarity', ascending = False).head(top_n)
+        return recommendations
+
     def _correlations(self, item_name: str, minimum_ratings: int = 0) -> pd.Series:
         """returns an item's correlation with all other items having at least minimum_ratings rating; drops missing values
         :param item_id: number to which an item is indexed
@@ -154,9 +169,32 @@ class RatingsData:
         a_prec = sum(precisions)/len(recs)
         return a_prec
 
-def load_movie_data(ratings_data: str = "ratings.csv", movies_data: str = "movies.csv") -> RatingsData:
-
+def load_movie_data(ratings_data: str = "ratings.csv", movies_data: str = "movies.csv", tags_data: str = "tags.csv", content: bool = False) -> RatingsData:
+    """loads and combines movie-related datasets (ratings, titles, tags) from the recommender folder, feeds them into RatingsData object        :param ratings_data: .csv file of movie ratings
+    :param movies_data: .csv file of movie titles
+    :param tags_data: csv file of movie tags
+    """
+    
     ratings: DataFrame = pd.read_csv(ratings_data)
+    ratings.drop(['timestamp'], 1, inplace=True)
+    
     titles: DataFrame = pd.read_csv(movies_data)
-    ratings_with_titles: DataFrame = pd.merge(ratings, titles, on='movieId')
-    return RatingsData(ratings_with_titles, "userId", "movieId", "title", "rating", False)
+
+    ratings_with_titles: DataFrame = pd.merge(ratings, titles, on = "movieId")
+    print(ratings_with_titles.head(10))
+
+    if not content: return RatingsData(ratings_with_titles, "userId", "movieId", "title", "rating", False)
+        
+    else:
+        #gets tags for a movie if there are any, and then creates a metadata column with tags/genre information for each movie
+        tags: DataFrame = pd.read_csv(tags_data)
+        tags.drop(['timestamp'], 1, inplace=True)
+
+        full_movie_dataset: DataFrame = pd.merge(ratings_with_titles, tags, on = ["userId", "movieId"], how = "left")
+        full_movie_dataset.fillna("", inplace=True)
+        full_movie_dataset = full_movie_dataset.groupby('movieId')['tag'].apply(lambda x: "%s" % ' '.join(x))
+        full_movie_dataset = pd.merge(ratings_with_titles, full_movie_dataset, on = "movieId", how = "left")
+        full_movie_dataset['metadata'] = full_movie_dataset[["tag", "genres"]].apply(lambda x: ' '.join(x), axis = 1)
+        full_movie_dataset.to_csv(r"/Users/jzymet/Desktop/recommender/full_movie_dataset.csv")
+
+        return RatingsData(full_movie_dataset, "userId", "movieId", "title", "rating", False)
