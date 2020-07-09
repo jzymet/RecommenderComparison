@@ -5,7 +5,7 @@ def test_ratings_data():
 
     movies_data: DataFrame = load_movie_data(content = True)
     recommendation_count: int = 10
-    my_recs = movies_data.recommend_items("Toy Story (1995)", recommendation_count)
+    my_recs = movies_data.recommend_items("Toy Story (1995)", recommendation_count, "cos")
     #user_0_hits = movies_data._held_out_matrix.iloc[0]
     print(my_recs)
 

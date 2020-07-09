@@ -4,10 +4,12 @@ import pandas as pd
 from pandas import DataFrame
 import numpy as np
 from scipy.spatial import distance
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.decomposition import TruncatedSVD
 import warnings
 warnings.filterwarnings('ignore')
 
-class RatingsData:
+class CollaborativeRecommender:
     """object for storing data for user ratings of items"""
 
     def __init__(self, df: DataFrame, user_id_col: str, item_id_col: str,  title_col: str, rating_col: str, binary: bool = True):
@@ -68,21 +70,6 @@ class RatingsData:
         :param top_n: number of recommended items to print
         :param distance_metric: "corr" for Pearson's r, "cos" for cosine similarity
         """
-        if distance_metric == "corr": dist = self._correlations
-        elif distance_metric == "cos": dist = self._cosine_similarities
-        else: raise ValueError("The distance heuristic must be 'corr', for correlation, or 'cos', for cosine similarity.")
-
-        recommendations = dist(item_name, 50).sort_values(by = 'Similarity', ascending = False).head(top_n)
-        return recommendations
-
-    def recommend_items_by_content(self, item_name: str, top_n: int = 5) -> pd.DataFrame:
-        """
-        prints top_n recommended movies based on metadata
-        :param item_name: name of item to use a seed
-        :param top_n: number of recommended items to print
-        """
-        #elaborate "metadata" in the above
-        
         if distance_metric == "corr": dist = self._correlations
         elif distance_metric == "cos": dist = self._cosine_similarities
         else: raise ValueError("The distance heuristic must be 'corr', for correlation, or 'cos', for cosine similarity.")
@@ -169,7 +156,96 @@ class RatingsData:
         a_prec = sum(precisions)/len(recs)
         return a_prec
 
-def load_movie_data(ratings_data: str = "ratings.csv", movies_data: str = "movies.csv", tags_data: str = "tags.csv", content: bool = False) -> RatingsData:
+class ContentRecommender:
+    """object for storing SVD embeddings of TD-IDF values of metadata per item"""
+
+    def __init__(self, tdidf_SVD_output: DataFrame):
+        """
+        :param df: dataframe
+        """
+        self._item_matrix = tdidf_SVD_output
+
+    @lru_cache(maxsize = 1000)
+    def recommend_items(self, item_name: str, top_n: int = 5, distance_metric: str = "corr") -> pd.DataFrame:
+        """
+        prints top_n recommended movies having at least 100 ratings, based on given item
+        :param item_name: name of item to use a seed
+        :param top_n: number of recommended items to print
+        :param distance_metric: "corr" for Pearson's r, "cos" for cosine similarity
+        """
+        if distance_metric == "corr": dist = self._correlations
+        elif distance_metric == "cos": dist = self._cosine_similarities
+        else: raise ValueError("The distance heuristic must be 'corr', for correlation, or 'cos', for cosine similarity.")
+
+        recommendations = dist(item_name, 50).sort_values(by = 'Similarity', ascending = False).head(top_n)
+        return recommendations
+
+    def _correlations(self, item_name: str, minimum_ratings: int = 0) -> pd.Series:
+        """returns an item's correlation with all other items having at least minimum_ratings rating; drops missing values
+        :param item_id: number to which an item is indexed
+        :param minimum_ratings: minimum number of ratings an item must have
+        """
+        #but the cold start problem!
+
+        #vector of ratings for given item
+        item_values = self._item_matrix[item_name]
+        #matrix of correlations between given item and other items, minus missing values
+        similarity_vector = DataFrame({'Similarity': self._item_matrix.corrwith(item_values)})
+        
+        return similarity_vector
+
+    def _cosine_similarities(self, item_name: str, minimum_ratings: int) -> pd.Series:
+        """returns an item's correlation with all other item having at least minimum_ratings rating; drops missing values
+        :param item_id: number to which an item is indexed
+        :param minimum_ratings: minimum number of ratings an item must have
+        """
+        #but the cold start problem!
+
+        #vector of ratings for given item
+        item_values = self._item_matrix[item_name]  
+        #matrix of cosine similarities between given item and other items
+        similarity_list = []
+        for col in self._item_matrix.columns:
+            similarity_list.append(1 - distance.cosine(item_values, self._item_matrix.loc[:, col]))
+        similarity_vector = DataFrame({'Similarity': similarity_list, 'Title': self._item_matrix.columns})
+        
+        return similarity_vector
+
+    def MAP_at_k(self, k: int, dist_metr: str = "corr") -> float: 
+        """returns MAP@k metric over all user-reclist pairs* 
+        :param k: recommendation list length
+        """
+        userAPs = []
+        for _, current_user in self._held_out_matrix.iterrows():
+            APs = []
+            print("Current User: %s" % current_user)
+            for movId, val in current_user.iteritems():
+                if val == 1:
+                    print("Seed for recommendation: %s" % self._item_to_title[movId])
+                    recommendations = self.recommend_items(self._item_to_title[movId], k)
+                    print("Precision: %s" % self.average_precision(recommendations, current_user))
+                    APs.append(self.average_precision(recommendations, current_user))
+            userAPs.append(sum(APs)/k)
+        print(userAPs)
+        MAP = sum(userAPs)/len(self._held_out_matrix)
+        return MAP
+                
+    def average_precision(self, recs: DataFrame, user_Data: DataFrame) -> float:
+        """returns average precision for particular user-reclist pair
+        :param recs: dataframe of recommendations
+        :param user_Data: the Series of user ratings for the pertinent movie
+        """
+
+        user = user_Data
+        precisions = []
+        for i in range(1, len(recs)+1):
+            top_i_recs: List[ints] = recs.index.values[:i]
+            precision: float = sum(user[movId] for movId in top_i_recs)/i
+            precisions.append(precision)
+        a_prec = sum(precisions)/len(recs)
+        return a_prec
+
+def load_movie_data(ratings_data: str = "ratings.csv", movies_data: str = "movies.csv", tags_data: str = "tags.csv", content: bool = False):
     """loads and combines movie-related datasets (ratings, titles, tags) from the recommender folder, feeds them into RatingsData object        :param ratings_data: .csv file of movie ratings
     :param movies_data: .csv file of movie titles
     :param tags_data: csv file of movie tags
@@ -181,20 +257,27 @@ def load_movie_data(ratings_data: str = "ratings.csv", movies_data: str = "movie
     titles: DataFrame = pd.read_csv(movies_data)
 
     ratings_with_titles: DataFrame = pd.merge(ratings, titles, on = "movieId")
-    print(ratings_with_titles.head(10))
 
-    if not content: return RatingsData(ratings_with_titles, "userId", "movieId", "title", "rating", False)
+    if not content: return CollaborativeRecommender(ratings_with_titles, "userId", "movieId", "title", "rating", False)
         
     else:
         #gets tags for a movie if there are any, and then creates a metadata column with tags/genre information for each movie
         tags: DataFrame = pd.read_csv(tags_data)
-        tags.drop(['timestamp'], 1, inplace=True)
-
+        tags.drop(['timestamp'], 1, inplace = True)
         full_movie_dataset: DataFrame = pd.merge(ratings_with_titles, tags, on = ["userId", "movieId"], how = "left")
-        full_movie_dataset.fillna("", inplace=True)
+        full_movie_dataset.fillna("", inplace = True)
         full_movie_dataset = full_movie_dataset.groupby('movieId')['tag'].apply(lambda x: "%s" % ' '.join(x))
         full_movie_dataset = pd.merge(ratings_with_titles, full_movie_dataset, on = "movieId", how = "left")
         full_movie_dataset['metadata'] = full_movie_dataset[["tag", "genres"]].apply(lambda x: ' '.join(x), axis = 1)
-        full_movie_dataset.to_csv(r"/Users/jzymet/Desktop/recommender/full_movie_dataset.csv")
+        full_movie_dataset = full_movie_dataset[["title", "metadata"]]
+        full_movie_dataset.drop_duplicates(subset = "title", inplace = True)
 
-        return RatingsData(full_movie_dataset, "userId", "movieId", "title", "rating", False)
+        tfidf = TfidfVectorizer(stop_words = "english")
+        tfidf_matrix = tfidf.fit_transform(full_movie_dataset['metadata'])
+        tfidf_df = pd.DataFrame(tfidf_matrix.toarray(), index = full_movie_dataset.index.tolist())
+        
+        svd = TruncatedSVD(n_components = 200)
+        latent_matrix_1 = svd.fit_transform(tfidf_df)
+        latent_matrix: DataFrame = pd.DataFrame(latent_matrix_1, index = full_movie_dataset.title.tolist()).transpose()
+
+        return ContentRecommender(latent_matrix)
