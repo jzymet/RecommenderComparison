@@ -82,7 +82,42 @@ class Recommender:
             else: raise ValueError("The distance heuristic must be 'corr', for correlation, or 'cos', for cosine similarity.")
             
         else: raise ValueError("Recommendation algorithm must be 'collab' for collaborative, or 'content' for content.")
-    
+
+    @lru_cache(maxsize = 1000)
+    def MAP_at_k(self, k: int, dist_metr: str = "corr", approach: str = "collab") -> float: 
+        """returns MAP@k metric over all user-reclist pairs* 
+        :param k: recommendation list length
+        """
+        userAPs = []
+        for _, current_user in self._held_out_matrix.iterrows():
+            APs = []
+            print("Current User: %s" % current_user)
+            for itTitle, val in current_user.iteritems():
+                if val == 1:
+                    print("Seed for recommendation: %s" % itTitle)
+                    recommendations = self.recommend_items(itTitle, k, dist_metr, approach)
+                    print("Precision: %s" % self.average_precision(recommendations, current_user))
+                    APs.append(self.average_precision(recommendations, current_user))
+            userAPs.append(sum(APs)/k)
+        print(userAPs)
+        MAP = sum(userAPs)/len(self._held_out_matrix)
+        return MAP
+                
+    def average_precision(self, recs: DataFrame, user_Data: DataFrame) -> float:
+        """returns average precision for particular user-reclist pair
+        :param recs: dataframe of recommendations
+        :param user_Data: the Series of user ratings for the pertinent movie
+        """
+
+        user = user_Data
+        precisions = []
+        for i in range(1, len(recs)+1):
+            top_i_recs: List[ints] = recs["Title"].values[:i]
+            precision: float = sum(user[itId] for itId in top_i_recs)/i
+            precisions.append(precision)
+        a_prec = sum(precisions)/len(recs)
+        return a_prec
+
 class CollaborativeRecommender(Recommender):
     """object for storing data for user ratings of items"""
 
@@ -90,7 +125,6 @@ class CollaborativeRecommender(Recommender):
 
         self._item_matrix: DataFrame = users_items
         self._ratings: DataFrame = ratings
-        print(self._ratings)
             
     def _corr(self, item_name: str, minimum_ratings: int = 0) -> pd.Series:
         """returns an item's correlation with all other items having at least minimum_ratings rating; drops missing values
@@ -101,15 +135,12 @@ class CollaborativeRecommender(Recommender):
 
         #vector of ratings for given item
         item_ratings = self._item_matrix[item_name]
-        print(item_ratings)
-        print(self._item_matrix.columns)
-        print(self._ratings['Number_of_ratings'])
         if (item_ratings == 2.5).all(): #check this over
-            similarity_vector = DataFrame({'Ratings_count': self._ratings['Number_of_ratings']})
+            similarity_vector = DataFrame({'Title': self._item_matrix.columns, 'Ratings_count': self._ratings['Number_of_ratings']})
             similarity_vector['Similarity'] = pd.Series([0 for x in range(len(similarity_vector.index))], index = similarity_vector.index)
         else:
             #matrix of correlations between given item and other items, minus missing values
-            similarity_vector = DataFrame({'Similarity': self._item_matrix.corrwith(item_ratings), 'Ratings_count': self._ratings['Number_of_ratings']})
+            similarity_vector = DataFrame({'Title': self._item_matrix.columns, 'Similarity': self._item_matrix.corrwith(item_ratings), 'Ratings_count': self._ratings['Number_of_ratings']})
 
         #same matrix, but subtracting all items with fewer than minimum_ratings
         similarity_vector = similarity_vector[similarity_vector['Ratings_count'] > minimum_ratings]
@@ -125,14 +156,14 @@ class CollaborativeRecommender(Recommender):
 
         item_ratings = self._item_matrix[item_name]
         if (item_ratings == 2.5).all():
-            similarity_vector = DataFrame({'Ratings_count': self._ratings['Number_of_ratings']})
+            similarity_vector = DataFrame({'Title': self._item_matrix.columns, 'Ratings_count': self._ratings['Number_of_ratings']})
             similarity_vector['Similarity'] = pd.Series([0 for x in range(len(similarity_vector.index))], index = similarity_vector.index)
         else:    
             #matrix of cosine similarities between given item and other items
             similarity_list = []
             for col in self._item_matrix.columns:
                 similarity_list.append(1 - distance.cosine(item_ratings, self._item_matrix.loc[:, col]))
-            similarity_vector = DataFrame({'Similarity': similarity_list, 'Ratings_count': self._ratings['Number_of_ratings']})
+            similarity_vector = DataFrame({'Title': self._item_matrix.columns, 'Similarity': similarity_list, 'Ratings_count': self._ratings['Number_of_ratings']})
 
         #same matrix, but subtracting all items with fewer than minimum_ratings
         similarity_vector = similarity_vector[similarity_vector['Ratings_count'] > minimum_ratings]
@@ -174,7 +205,7 @@ class ContentRecommender(Recommender):
         #vector of ratings for given item
         item_values = self._item_matrix[item_name]
         #matrix of correlations between given item and other items, minus missing values
-        similarity_vector = DataFrame({'Similarity': self._item_matrix.corrwith(item_values)})
+        similarity_vector = DataFrame({'Title': self._item_matrix.columns, 'Similarity': self._item_matrix.corrwith(item_values)})
         
         return similarity_vector
 
@@ -220,37 +251,3 @@ def load_movie_data(ratings_data: str = "ratings.csv", movies_data: str = "movie
     full_movie_dataset.drop(["tag", "genres"], 1, inplace = True)
 
     return full_movie_dataset
-
-def MAP_at_k(self, k: int, dist_metr: str = "corr") -> float: 
-    """returns MAP@k metric over all user-reclist pairs* 
-    :param k: recommendation list length
-    """
-    userAPs = []
-    for _, current_user in self._held_out_matrix.iterrows():
-        APs = []
-        print("Current User: %s" % current_user)
-        for movId, val in current_user.iteritems():
-            if val == 1:
-                print("Seed for recommendation: %s" % self._item_to_title[movId])
-                recommendations = self.recommend_items(self._item_to_title[movId], k)
-                print("Precision: %s" % self.average_precision(recommendations, current_user))
-                APs.append(self.average_precision(recommendations, current_user))
-        userAPs.append(sum(APs)/k)
-    print(userAPs)
-    MAP = sum(userAPs)/len(self._held_out_matrix)
-    return MAP
-                
-def average_precision(self, recs: DataFrame, user_Data: DataFrame) -> float:
-    """returns average precision for particular user-reclist pair
-    :param recs: dataframe of recommendations
-    :param user_Data: the Series of user ratings for the pertinent movie
-    """
-
-    user = user_Data
-    precisions = []
-    for i in range(1, len(recs)+1):
-        top_i_recs: List[ints] = recs.index.values[:i]
-        precision: float = sum(user[movId] for movId in top_i_recs)/i
-        precisions.append(precision)
-    a_prec = sum(precisions)/len(recs)
-    return a_prec
