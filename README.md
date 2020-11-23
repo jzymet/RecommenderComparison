@@ -9,7 +9,7 @@ Simple recommenders such as content-based recommenders and collaborative filters
 Data scientists have turned to <I>hybrid recommenders</I>, in which multiple simple recommenders are combined, to surmount weaknesses displayed by any component recommender in isolation.
 
 A variety of data scientists, in a number of prominent articles on Towards Data Science, use a weighted average between collaborative and content-based recommendations, without comparing this approach to other hybrid approaches.
-- E.g., switching between content and collaborative recommendation, which, to my knowledge, has not been discussed on Towards Data Science.
+- E.g., the less well-known approach of switching between content and collaborative recommendation, which, to my knowledge, has not been discussed on Towards Data Science.
 
 <b>Question</b>: Amongst a variety of choices for hybrid algorithm, which one works best? In other words, <i>how</i> should two recommenders be combined, given a dataset?
 
