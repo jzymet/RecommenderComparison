@@ -22,8 +22,7 @@ Project codes up from scratch and compares the performance of four movie recomme
 
 I find that content recommendation performs better than collaborative on MAP@10 accuracy metric for less-rated movie seeds, while collaborative performs better for often-rated seeds.
 
-I further show that averaging—used by many data scientists on TDS—performs only half as well as the uncommon switch algorithm.
-- This calls into question the use of averaging if the goal is accuracy.
+I further show that averaging—used by many data scientists on TDS—performs only half as well as the uncommon switch algorithm. This calls into question the use of averaging if the goal is accuracy.
 
 ## Demo:
 
