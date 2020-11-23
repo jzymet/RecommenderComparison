@@ -5,14 +5,12 @@ This was a project that I prepared for admission to a couple data science transi
 ## Problem
 
 Content recommenders and collaborative recommenders have different strengths/weaknesses, affecting how relevant their recommendations are.
-- For products that have lots of user ratings, for example, by-item collaborative filters are quite accurate;
-- but for products that have been rated few times, the collaborative filter performs poorly.
 
-Data scientists turn to hybrid recommenders—in which multiple simple recommenders are combined—to surmount weaknesses displayed by any component recommender in isolation.
+Data scientists turn to <I>hybrid recommenders</I>—in which multiple simple recommenders are combined—to surmount weaknesses displayed by any component recommender in isolation.
 
 The data scientists on Towards Data Science often use a weighted average between the collaborative and content-based approaches, without comparing the hybrid to other possibilities.
 
-Amongst a variety of choices for hybrid algorithm, which one works best? In other words, how should two recommenders be combined, given a dataset?
+<b>Question</b>: Amongst a variety of choices for hybrid algorithm, which one works best? In other words, how should two recommenders be combined, given a dataset?
 
 ## Solution:
 
