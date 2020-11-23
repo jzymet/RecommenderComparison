@@ -14,7 +14,7 @@ The data scientists on Towards Data Science often use a weighted average between
 
 ## Solution:
 
-Project compares the performance of four movie recommenders against the MovieLens dataset: 
+Project codes up from scratch and compares the performance of four movie recommenders against the MovieLens dataset: 
 - Content-based
 - By-item collaborative filter
 - Hybrid weighted average
