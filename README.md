@@ -1,4 +1,4 @@
-#Comparing hybrid movie recommenders
+# Comparing hybrid movie recommenders
 
 This was a project that I prepared for admission to a couple data science transitional programs — Insight, in particular.
 
