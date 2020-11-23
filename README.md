@@ -12,7 +12,7 @@ A variety of data scientists, in a number of prominent articles on Towards Data 
 
 <b>Question</b>: Amongst a variety of choices for hybrid algorithm, which one works best? In other words, <i>how</i> should two recommenders be combined, given a dataset?
 
-## Solution:
+## Solution
 
 Project codes up from scratch and compares the performance of four movie recommenders against the MovieLens dataset: 
 - Content-based
