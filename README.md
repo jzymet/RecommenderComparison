@@ -1,6 +1,6 @@
 # Comparing hybrid movie recommenders
 
-This was a project that I prepared for admission to a few data science transitional programs — the Fall 2020 session of Insight Data Science, in particular.
+This was a project that I prepared for admission to a few data science transitional programs—the Fall 2020 session of Insight Data Science, in particular.
 
 ## Problem
 
