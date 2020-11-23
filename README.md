@@ -24,3 +24,7 @@ I find that content recommendation performs better than collaborative on MAP@10 
 
 I further show that averaging—used by many data scientists on TDS—performs only half as well as the uncommon switch algorithm.
 - This calls into question the use of averaging if the goal is accuracy.
+
+## Demo:
+
+See [here](https://github.com/jzymet/recommender/blob/master/demo.ipynb).
