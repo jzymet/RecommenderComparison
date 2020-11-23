@@ -5,7 +5,7 @@ This was a project that I prepared for admission to a couple data science transi
 ## Problem
 
 Content recommenders and collaborative recommenders have different strengths/weaknesses, affecting how relevant their recommendations are.
-- For example, for products that have lots of user ratings, by-item collaborative filters are quite accurate;
+- For products that have lots of user ratings, for example, by-item collaborative filters are quite accurate;
 - but for products that have been rated few times, the collaborative filter performs poorly.
 
 Data scientists turn to hybrid recommenders—in which multiple simple recommenders are combined—to surmount weaknesses displayed by any component recommender in isolation.
