@@ -21,11 +21,11 @@ Project codes up from scratch and compares the performance of four movie recomme
 - Hybrid weighted average
 - Hybrid content-to-collaborative switch once seed has enough ratings
 
-I find that content recommendation performs better than collaborative on MAP@10 accuracy metric for less-rated movie seeds, while collaborative performs better for often-rated seeds.
+I find that content recommendation performs better than collaborative on the Mean Average Precision @ 10 (MAP@10) accuracy metric for less-rated movie seeds, while collaborative performs better for often-rated seeds.
 
 I further show that averaging—used by many data scientists on TDS—performs only half as well as the uncommon switch algorithm. 
-- The point is to call into question the use of the weighted average in light of the switching approach, particularly when the goal is accuracy.
-- If recommender A outperforms recommender B at one time, and then B outperforms A at another, it seems better to switch from A to B rather than to average them
+- The point is to call into question the use of the weighted average in light of the switching approach, particularly when the goal is accuracy-based
+- If recommender A outperforms recommender B at one time and B outperforms A at a later time, then the hypothesis that I raise in light of my results is that it's generally better (at least according to MAP) to switch from A to B at the best time rather than to average them with the best weight
 - And, of course, if A always outperforms B, then just go with A
 
 ## Demo
