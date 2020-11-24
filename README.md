@@ -25,7 +25,8 @@ I find that content recommendation performs better than collaborative on MAP@10 
 
 I further show that averaging—used by many data scientists on TDS—performs only half as well as the uncommon switch algorithm. 
 - The point is to call into question the use of the weighted average in light of the switching approach, particularly when the goal is accuracy.
-- If recommender A outperforms recommender B at one time, and then B outperforms A at another, why average A and B rather than switching from A to B?
+- If recommender A outperforms recommender B at one time, and then B outperforms A at another, it seems better to switch from A to B rather than to average them
+- And, of course, if A always outperforms B, then just go with A
 
 ## Demo
 
