@@ -13,171 +13,82 @@ import requests
 #TO DO: delete what you can up here after all is said and done?
 
 class Recommender:
-    
-    """
-
-    Class containing collaborative, content, hybrid weighted-average, and hybrid switching recommenders.
-    
-    """
+    """Class containing collaborative, content, hybrid weighted-average, and hybrid switching recommenders"""
 
     def __init__(self, inputdata: DataFrame, user_id_col: str, item_id_col: str,  title_col: str, rating_col: str = "rating", metadata_col: str = "metadata", binary: bool = False):
-        
         """
-
         :param inputdata: dataframe
         :param user_id_col: column title for user ID
         :param item_id_col: column title for item ID
         :param rating_col: column title for ratings
         :param metadata_col: column title for metadata
         :param binary: whether the user data are binary (e.g., purchase data) or not (e.g., ratings data)
-
-        (Why parameters for all of the input column names? Because of an ongoing effort on my part to code this as a general *item* recommender, rather than as a movie recommender;          hence should accept any dataframe (movie ratings, item purchases, etc.) having the appropriate columns and whose names are input by the user.)
-
         """
-        
+        ###TO DO: delete title-to-item and item-to-title dictionaries
+        ###TO DO: delete held_out_matrix_raw 
         ###TO DO: move construction of recommender-specific datasets to their appropriate subclasses;
+        ###%%%%%%%%%wait -- does that mean TF-IDF will be re-executed everytime we call ContentRecommender? bad for taking all those AP@k's
         ###TO DO: break MAP_at_k into subfunctions, one for recording the various AP@k's and one for actually taking MAP@k
         ###TO DO: unify the form of all corr/cos methods and lift them up to Recommender class; have subclasses refer to it
         ###TO DO: get rid of base class method recommend_items? just call the subclasses themselves. weight/cutoff for recommend_items is silly
         ###TO DO: hybrid recommenders shouldn't have parameters, but should instead just call the other recommenders
         
         self._inputdata: DataFrame = inputdata
-        
         self._user: str = user_id_col
-        
         self._item: str = item_id_col
-        
         self._title: str = title_col
-        
         self._rating: str = rating_col
-        
         self._metadata: str = metadata_col
 
-        self._binary: bool = binary
+        #dictionaries mapping title to item, and item to title
+        self._title_to_item = {}
+        for i in range(1, len(self._inputdata)):
+            self._title_to_item[self._inputdata[self._title][i]] = self._inputdata[self._item][i]
+        self._item_to_title = {}
+        for i in range(1, len(self._inputdata)):
+            self._item_to_title[self._inputdata[self._item][i]] = self._inputdata[self._title][i]
 
-        
-        #computes matrix of user ratings of each item, and splits this matrix into training and test using split_item_matrix
-        
+        #matrix of user ratings of each item
         self._item_matrix: DataFrame = self._inputdata.pivot_table(index = self._user, columns = self._title, values = self._rating)
 
-        _split_item_matrices: [DataFrame, DataFrame] = self._split_item_matrix()
-
-        self._item_matrix_training: DataFrame = _split_item_matrices[0]
-
-        self._item_matrix_test: DataFrame = _split_item_matrices[1]
-
-
-        #fill missing values in training set with median rating. FOR FUTURE: replace with a better strategy? e.g., estimate the missing numbers.
+        #splitting the user-ratings matrix into training (90%) and test (10%)
+        held_out_count: int = int(len(self._item_matrix)/10)
         
-        self._item_matrix_training.fillna(2.5, inplace = True)
-
+        self._held_out_matrix: DataFrame = self._item_matrix.loc[:held_out_count, :]
+        self._held_out_matrix_raw: DataFrame =  self._held_out_matrix
+        self._item_matrix: DataFrame = self._item_matrix.loc[(held_out_count+1):len(self._item_matrix), :]
         
+        #fill missing values with median so that cosine similarities can be computed
+        #FOR FUTURE: a better strategy for this? e.g., estimate the missing values.
+        self._item_matrix.fillna(2.5, inplace = True)
+
+        ###if ratings data, convert held out users' ratings to 1's if rating is greater than 4, else convert to 0 
+        if not binary:
+            self._held_out_matrix = pd.DataFrame(np.where(self._held_out_matrix.values >= 4, 1, 0), self._held_out_matrix.index)
+            self._held_out_matrix.columns = self._item_matrix.columns
+
         #matrix with items as rows and with mean ratings and rating count as cols
-        
         self._ratings = DataFrame(self._inputdata.groupby(self._title)['rating'].mean())
-        
         self._ratings['Number_of_ratings'] = self._inputdata.groupby(self._title)['rating'].count()
 
-        
-        #instantitates matrices of latent features used in content recommendation by applying create_latent_feature_matrix
-        
-        latent_content_feature_matrices: [DataFrame, DataFrame] = self._create_latent_feature_matrices()
-
-        self._latent_content_features: DataFrame = latent_content_feature_matrices[0]
-
-        self._content_ratings: DataFrame = latent_content_feature_matrices[1]
-
-        
-    def _split_item_matrix(self, held_out_percentage: float = 0.1) -> [DataFrame, DataFrame]:
-
-        """
-        
-        Splits the user-ratings matrix into training and test, with default 90%/10% split.
-        
-        :param held_out_percentage: percentage of rows held out from training set
-
-        """
-
-        
-        #check that the user inputted a valid percentage for holdout
-        
-        assert 0 <= held_out_percentage <= .95, 'Percentage held out must be between 0 and 0.95 (inclusive).'
-
-
-        #split item matrix into training and test
-        
-        held_out_count: int = int(held_out_percentage*len(self._item_matrix))
-        
-        item_matrix_test: DataFrame = self._item_matrix.loc[:held_out_count, :]
-
-        item_matrix_training: DataFrame = self._item_matrix.loc[(held_out_count+1):len(self._item_matrix), :]
-        
-
-        #if dealing with ratings data, convert held out users' ratings to 1's if rating is greater than or equal to 4, else convert to 0
-
-        if not self._binary:
-            
-            item_matrix_test = DataFrame(np.where(item_matrix_test.values >= 4, 1, 0), item_matrix_test.index)
-            
-            item_matrix_test.columns = self._item_matrix.columns
-
-            
-        return [item_matrix_training, item_matrix_test]
-
-        
-    def _create_latent_feature_matrices(self, n_dimensions: int = 200) -> [DataFrame, DataFrame]:
-
-        """
-
-        To compute content-based recommendations, create a matrix of 200 latent features based on metadata... 
-        - by applying TF-IDF to the metadata,
-        - and then Truncated Singular Value Decomposition to the resulting vectors, reducing their dimensionality so as to speed up later computation.
-
-        Accompany with matrix tracking number of ratings.
-
-        :param n_comps: number of dimensions of the reduced vectors
-
-
-        """
-
-        #FOR FUTURE: if you plot content-based recommender's MAP against n_dimensions, is there an elbow at 200? seems so far that performance doesn't improve after 200, but perhaps we can go lower.
-
-        
-        #create metadata matrix
-
-        cont_matrix: DataFrame = self._inputdata[[self._title, self._metadata]]
-        
-        cont_matrix.drop_duplicates(subset = self._title, inplace = True)
-
-        
-        #apply TF-IDF to metadata matrix, creating large vector of values associated to each movie
-        
+        #creates matrix of 200 latent features by applying TF-IDF to metadata and then Singular Value Decomposition to reduce dimensionality
+        #FOR FUTURE: make graph plotting MAP of content recommender against number of latent features? performance didn't seem to improve much past 200.
+        self._cont_matrix: DataFrame = self._inputdata[[self._title, self._metadata]]
+        self._cont_matrix.drop_duplicates(subset = self._title, inplace = True)
         tfidf = TfidfVectorizer(stop_words = "english")
-        
-        tfidf_matrix = tfidf.fit_transform(cont_matrix[self._metadata])
-        
-        tfidf_df: DataFrame = DataFrame(tfidf_matrix.toarray(), index = cont_matrix.index.tolist())
-
-        
-        #to speed up similarity computation during content recommendation, reduce dimensionality of TF-IDF vectors to 200 features by applying Truncated Singular Value Decomposition
-        
-        svd = TruncatedSVD(n_components = n_dimensions)
-        
-        latent_matrix_raw: DataFrame = svd.fit_transform(tfidf_df)
-        
-        latent_cont_matrix: DataFrame = DataFrame(latent_matrix_raw, index = cont_matrix[self._title].tolist()).transpose()
-
-        cont_ratings: pd.Series = pd.Series(self._ratings['Number_of_ratings'][x] for x in latent_cont_matrix.columns)
-        
-        return [latent_cont_matrix, cont_ratings]
-
+        tfidf_matrix = tfidf.fit_transform(self._cont_matrix[self._metadata])
+        tfidf_df = pd.DataFrame(tfidf_matrix.toarray(), index = self._cont_matrix.index.tolist())
+        svd = TruncatedSVD(n_components = 200)
+        latent_matrix_1 = svd.fit_transform(tfidf_df)
+        self._latent_cont_matrix: DataFrame = pd.DataFrame(latent_matrix_1, index = self._cont_matrix[self._title].tolist()).transpose()
+        self._cont_ratings: pd.Series = pd.Series(self._ratings['Number_of_ratings'][x] for x in self._latent_cont_matrix.columns)
         
     @lru_cache(maxsize = 1000)
     def recommend_items(self, item_name: str, distance_metric: str = "cos", approach: str = "collab", weight: float = 0.5, cutoff: int = 50) -> DataFrame:
 
         """
 
-        Returns ordered list of recommended items based on a given seed item, algorithm (collaborative filter, content-based, etc.), and distance metric.
+        For a given seed item, recommendation algorithm, and distance metric, returns an ordered list of recommended items.
 
         :param item_name: name of item to use a seed
         :param distance_metric: method by which similarity is calculated
@@ -187,76 +98,45 @@ class Recommender:
 
         """
 
-        
         if approach == "collab":
-            
             if distance_metric == "corr":
-                
-                return CollaborativeRecommender(self._item_matrix_training, self._ratings)._corr(item_name)
-            
+                return CollaborativeRecommender(self._item_matrix, self._ratings)._corr(item_name)
             elif distance_metric == "cos":
-                
-                return CollaborativeRecommender(self._item_matrix_training, self._ratings)._cosine(item_name)
-            
+                return CollaborativeRecommender(self._item_matrix, self._ratings)._cosine(item_name)
             else: raise ValueError("The distance heuristic must be 'corr', for correlation, or 'cos', for cosine similarity.")
-
             
         elif approach == "content":
-            
             if distance_metric == "corr":
-                
-                return ContentRecommender(self._latent_content_features, self._content_ratings)._corr(item_name)
-            
+                return ContentRecommender(self._latent_cont_matrix, self._cont_ratings)._corr(item_name)
             elif distance_metric == "cos":
-                
-                return ContentRecommender(self._latent_content_features, self._content_ratings)._cosine(item_name)
-            
+                return ContentRecommender(self._latent_cont_matrix, self._cont_ratings)._cosine(item_name)
             else: raise ValueError("The distance heuristic must be 'corr', for correlation, or 'cos', for cosine similarity.")
 
-            
         elif approach == "weighted":
-            
             if distance_metric == "corr":
-                
-                return WeightedRecommender(self._item_matrix, self._ratings, self._latent_content_features, self._content_ratings)._corr(item_name)
-            
+                return WeightedRecommender(self._item_matrix, self._ratings, self._latent_cont_matrix, self._cont_ratings)._corr(item_name)
             elif distance_metric == "cos":
-                
-                return WeightedRecommender(self._item_matrix, self._ratings, self._latent_content_features, self._content_ratings)._cosine(item_name)
-            
+                return WeightedRecommender(self._item_matrix, self._ratings, self._latent_cont_matrix, self._cont_ratings)._cosine(item_name)
             else: raise ValueError("The distance heuristic must be 'corr', for correlation, or 'cos', for cosine similarity.")
 
-            
         elif approach == "switch":
-            
             if distance_metric == "corr":
-                
-                return SwitchRecommender(self._item_matrix, self._ratings, self._latent_content_features, self._content_ratings)._corr(item_name)
-            
+                return SwitchRecommender(self._item_matrix, self._ratings, self._latent_cont_matrix, self._cont_ratings)._corr(item_name)
             elif distance_metric == "cos":
-                
-                return SwitchRecommender(self._item_matrix, self._ratings, self._latent_content_features, self._content_ratings)._cosine(item_name)
-            
+                return SwitchRecommender(self._item_matrix, self._ratings, self._latent_cont_matrix, self._cont_ratings)._cosine(item_name)
             else: raise ValueError("The distance heuristic must be 'corr', for correlation, or 'cos', for cosine similarity.")
-
-            
+           
         else: raise ValueError("Recommendation algorithm must be 'collab' for collaborative, 'content' for content, 'weighted' for weighted, or 'switch' for switch.")
 
-        
     def prune_recommended(self, similarity_vector: DataFrame, top_n: int = 10,  minimum_ratings: int = 0) -> DataFrame:
-
         """
-
-        Takes an ordered list of recommendations, optionally removes any movies having fewer than some given minimum number of ratings, and returns only the top_n items on        that list.
-
+        takes an ordered list of recommendation, optionally removes any movies having fewer than a minimum number of ratings, and returns only the top n
         :param similarity_vector: list of recommendations
         :param top_n: number of movies to return
         :param minimum_ratings: minimum number of ratings needed to be returned
-
         """
         
-        new_similarity_vector: DataFrame = similarity_vector[similarity_vector['Ratings_count'] > minimum_ratings]
-        
+        new_similarity_vector = similarity_vector[similarity_vector['Ratings_count'] > minimum_ratings]
         return new_similarity_vector.head(top_n)
 
     @lru_cache(maxsize = 1000)
@@ -302,30 +182,19 @@ class Recommender:
         else: return "None"
                 
     def average_precision(self, recs: DataFrame, user_Data: DataFrame) -> float:
-
-        """
         
-        Returns average precision for the recommendation list stemming from a seed item that was liked by a user.
-
+        """returns average precision for the recommendation list stemming from a seed item that was liked by user
         :param recs: dataframe of recommendations
         :param user_Data: the Series of user ratings for the pertinent movie
-
         """
 
         user = user_Data
-        
         precisions = []
-        
         for i in range(1, len(recs)+1):
-
             top_i_recs: List[strs] = recs["Title"].values[:i]
-            
             precision: float = sum(user[itId] for itId in top_i_recs)/i
-            
             precisions.append(precision)
-            
         a_prec = sum(precisions)/len(recs)
-        
         return a_prec
 
 class CollaborativeRecommender(Recommender):
@@ -473,7 +342,7 @@ class WeightedRecommender(Recommender):
         return similarity_vector
 
 class SwitchRecommender(Recommender):
-    """defines architecture that switches from content to collaborative recommendation after seed has enough ratings"""
+   """defines architecture that switches from content to collaborative recommendation after seed has enough ratings"""
     
     def __init__(self, users_items: DataFrame, ratings: DataFrame, latent_cont_matrix: DataFrame, cont_ratings: DataFrame, cutoff: int = 100):
         """
