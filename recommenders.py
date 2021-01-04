@@ -10,16 +10,16 @@ import warnings
 warnings.filterwarnings('ignore')
 import io
 import requests
-#TO DO: delete what you can up here after all is said and done?
 
 class Recommender:
     
     """
 
-    Class containing collaborative, content, hybrid weighted-average, and hybrid switching recommenders.
+    Class containing collaborative, content, hybrid weighted-average, and hybrid switching recommenders as subclasses.
     
     """
 
+    
     def __init__(self, inputdata: DataFrame, user_id_col: str, item_id_col: str,  title_col: str, rating_col: str = "rating", metadata_col: str = "metadata", binary: bool = False):
         
         """
@@ -33,59 +33,56 @@ class Recommender:
 
         (Why parameters for all of the input column names? Because of an ongoing effort on my part to code this as a general *item* recommender, rather than as a movie recommender;          hence should accept any dataframe (movie ratings, item purchases, etc.) having the appropriate columns and whose names are input by the user.)
 
-        """
+        """     
+        ###TO DO: clarify argument structure of/clean up/comment on average precision and MAP methods. break MAP_at_k into subfunctions, one for recording the various AP@k's and one for actually taking MAP@k
+        ###TO DO: "content ratings"/"collaborative ratings"?
+        ###TO DO: align outputs of different recommenders
         
-        ###TO DO: move construction of recommender-specific datasets to their appropriate subclasses;
-        ###TO DO: break MAP_at_k into subfunctions, one for recording the various AP@k's and one for actually taking MAP@k
-        ###TO DO: unify the form of all corr/cos methods and lift them up to Recommender class; have subclasses refer to it
-        ###TO DO: get rid of base class method recommend_items? just call the subclasses themselves. weight/cutoff for recommend_items is silly
-        ###TO DO: hybrid recommenders shouldn't have parameters, but should instead just call the other recommenders
+        self.inputdata: DataFrame = inputdata
         
-        self._inputdata: DataFrame = inputdata
+        self.user: str = user_id_col
         
-        self._user: str = user_id_col
+        self.item: str = item_id_col
         
-        self._item: str = item_id_col
+        self.title: str = title_col
         
-        self._title: str = title_col
+        self.rating: str = rating_col
         
-        self._rating: str = rating_col
-        
-        self._metadata: str = metadata_col
+        self.metadata: str = metadata_col
 
-        self._binary: bool = binary
+        self.binary: bool = binary
 
         
-        #computes matrix of user ratings of each item, and splits this matrix into training and test using split_item_matrix
+        #computes matrix of user ratings of each item, and splits this matrix into training and test using _split_item_matrix()
         
-        self._item_matrix: DataFrame = self._inputdata.pivot_table(index = self._user, columns = self._title, values = self._rating)
+        self.item_matrix: DataFrame = self.inputdata.pivot_table(index = self.user, columns = self.title, values = self.rating)
 
-        _split_item_matrices: [DataFrame, DataFrame] = self._split_item_matrix()
+        split_item_matrices: [DataFrame, DataFrame] = self._split_item_matrix()
 
-        self._item_matrix_training: DataFrame = _split_item_matrices[0]
+        self.item_matrix_training: DataFrame = split_item_matrices[0]
 
-        self._item_matrix_test: DataFrame = _split_item_matrices[1]
+        self.item_matrix_test: DataFrame = split_item_matrices[1]
 
 
         #fill missing values in training set with median rating. FOR FUTURE: replace with a better strategy? e.g., estimate the missing numbers.
         
-        self._item_matrix_training.fillna(2.5, inplace = True)
+        self.item_matrix_training.fillna(2.5, inplace = True)
 
         
         #matrix with items as rows and with mean ratings and rating count as cols
         
-        self._ratings = DataFrame(self._inputdata.groupby(self._title)['rating'].mean())
+        self.ratings = DataFrame(self.inputdata.groupby(self.title)['rating'].mean())
         
-        self._ratings['Number_of_ratings'] = self._inputdata.groupby(self._title)['rating'].count()
+        self.ratings['Number_of_ratings'] = self.inputdata.groupby(self.title)['rating'].count()
 
         
-        #instantitates matrices of latent features used in content recommendation by applying create_latent_feature_matrix
+        #instantitates matrices of latent features used in content recommendation by applying _create_latent_feature_matrix()
         
         latent_content_feature_matrices: [DataFrame, DataFrame] = self._create_latent_feature_matrices()
 
-        self._latent_content_features: DataFrame = latent_content_feature_matrices[0]
+        self.latent_content_features: DataFrame = latent_content_feature_matrices[0]
 
-        self._content_ratings: DataFrame = latent_content_feature_matrices[1]
+        self.content_ratings: DataFrame = latent_content_feature_matrices[1]
 
         
     def _split_item_matrix(self, held_out_percentage: float = 0.1) -> [DataFrame, DataFrame]:
@@ -97,7 +94,7 @@ class Recommender:
         :param held_out_percentage: percentage of rows held out from training set
 
         """
-
+        
         
         #check that the user inputted a valid percentage for holdout
         
@@ -106,20 +103,22 @@ class Recommender:
 
         #split item matrix into training and test
         
-        held_out_count: int = int(held_out_percentage*len(self._item_matrix))
+        held_out_count: int = int(held_out_percentage*len(self.item_matrix))
         
-        item_matrix_test: DataFrame = self._item_matrix.loc[:held_out_count, :]
+        item_matrix_test: DataFrame = self.item_matrix.loc[:held_out_count, :]
 
-        item_matrix_training: DataFrame = self._item_matrix.loc[(held_out_count+1):len(self._item_matrix), :]
+        item_matrix_training: DataFrame = self.item_matrix.loc[(held_out_count+1):len(self.item_matrix), :]
         
 
         #if dealing with ratings data, convert held out users' ratings to 1's if rating is greater than or equal to 4, else convert to 0
+        #the newly converted 1's will define the seeds to be used in model validation
+        #FOR FUTURE: how do these architectures perform with other cutoffs (e.g., >= 3)?
 
-        if not self._binary:
+        if not self.binary:
             
             item_matrix_test = DataFrame(np.where(item_matrix_test.values >= 4, 1, 0), item_matrix_test.index)
             
-            item_matrix_test.columns = self._item_matrix.columns
+            item_matrix_test.columns = self.item_matrix.columns
 
             
         return [item_matrix_training, item_matrix_test]
@@ -140,105 +139,154 @@ class Recommender:
 
         """
 
-        #FOR FUTURE: if you plot content-based recommender's MAP against n_dimensions, is there an elbow at 200? seems so far that performance doesn't improve after 200, but perhaps we can go lower.
+        #FOR FUTURE: if you plot content-based recommender's MAP against n_dimensions hyperparameter, is there an elbow at 200? seems so far that performance doesn't improve after 200, but perhaps we can go lower.
 
         
         #create metadata matrix
 
-        cont_matrix: DataFrame = self._inputdata[[self._title, self._metadata]]
+        metadata_matrix: DataFrame = self.inputdata[[self.title, self.metadata]]
         
-        cont_matrix.drop_duplicates(subset = self._title, inplace = True)
+        metadata_matrix.drop_duplicates(subset = self.title, inplace = True)
 
         
-        #apply TF-IDF to metadata matrix, creating large vector of values associated to each movie
+        #apply TF-IDF to metadata matrix, creating large vector of values associated with each movie
         
         tfidf = TfidfVectorizer(stop_words = "english")
         
-        tfidf_matrix = tfidf.fit_transform(cont_matrix[self._metadata])
+        tfidf_matrix = tfidf.fit_transform(metadata_matrix[self.metadata])
         
-        tfidf_df: DataFrame = DataFrame(tfidf_matrix.toarray(), index = cont_matrix.index.tolist())
+        tfidf_df: DataFrame = DataFrame(tfidf_matrix.toarray(), index = metadata_matrix.index.tolist())
 
         
-        #to speed up similarity computation during content recommendation, reduce dimensionality of TF-IDF vectors to 200 features by applying Truncated Singular Value Decomposition
+        #to speed up similarity computation during content recommendation, reduce dimensionality of TF-IDF vectors to 200 latent features by applying Truncated Singular Value Decomposition
         
         svd = TruncatedSVD(n_components = n_dimensions)
         
         latent_matrix_raw: DataFrame = svd.fit_transform(tfidf_df)
         
-        latent_cont_matrix: DataFrame = DataFrame(latent_matrix_raw, index = cont_matrix[self._title].tolist()).transpose()
+        latent_content_matrix: DataFrame = DataFrame(latent_matrix_raw, index = metadata_matrix[self.title].tolist()).transpose()
 
-        cont_ratings: pd.Series = pd.Series(self._ratings['Number_of_ratings'][x] for x in latent_cont_matrix.columns)
+        content_ratings: pd.Series = pd.Series(self.ratings['Number_of_ratings'][x] for x in latent_content_matrix.columns)
         
-        return [latent_cont_matrix, cont_ratings]
+        return [latent_content_matrix, content_ratings]
+
+
+    def corr(self, item_name: str, comparanda: DataFrame, ratings: DataFrame) -> pd.Series:
+
+        """
+
+        Returns correlations between a supplied vector of a given item and those of all other items.
+
+        :param item_name: name of item
+        :param comparanda: DataFrame consisting of numerical vectors each associated to a particular item (e.g., item_matrix_training if we're comparing user ratings of differnet items, and latent_content_features if we're comparing latent content features of different items)
+        :param ratings: architecture-specific ratings
+
+        """
 
         
-    @lru_cache(maxsize = 1000)
-    def recommend_items(self, item_name: str, distance_metric: str = "cos", approach: str = "collab", weight: float = 0.5, cutoff: int = 50) -> DataFrame:
+        #vector of ratings for input item
+        
+        item_ratings = self.comparanda[item_name]
+        
+
+        #checks if entire item_ratings vector originated with empty values (i.e., every value is 2.5 at this point), set all values of output to 0 if so
+        
+        if (item_ratings == 2.5).all(): 
+            
+            similarity_vector = DataFrame({'Title': comparanda.columns, 'Ratings_count': ratings})
+            
+            similarity_vector['Similarity'] = pd.Series([0 for x in range(len(similarity_vector.index))], index = similarity_vector.index)
+
+        #else compute matrix of correlations between given item and other items, minus missing values
+        
+        else:
+
+            similarity_vector = DataFrame({'Title': comparanda.columns, 'Similarity': comparanda.corrwith(item_ratings), 'Ratings_count': ratings})
+
+            similarity_vector = similarity_vector.sort_values(by = ["Similarity", "Ratings_count"], ascending = False)
+
+            similarity_vector = similarity_vector[1:]
+            
+        
+        return similarity_vector
+
+    
+    def cosine(self, item_name: str, comparanda: DataFrame, ratings: DataFrame) -> pd.Series:
+
+        """
+
+        Returns cosine similarities between a supplied vector of a given item and those of all other items.
+
+        :param item_name: name of item
+        :param comparanda: DataFrame consisting of numerical vectors each associated to a particular item (e.g., item_matrix_training if we're comparing user ratings of differnet items, and latent_content_features if we're comparing latent content features of different items)
+        :param ratings: architecture-specific ratings
+
+        """       
+
+        
+        #vector of ratings for input item
+        
+        item_ratings = comparanda[item_name]
+
+
+        #checks if entire item_ratings vector originated with empty values (i.e., every value is 2.5 at this point), set all values of output to 0 if so
+        
+        if (item_ratings == 2.5).all():
+            
+            similarity_vector = DataFrame({'Title': comparanda.columns, 'Ratings_count': ratings})
+            
+            similarity_vector['Similarity'] = pd.Series([0 for x in range(len(similarity_vector.index))], index = similarity_vector.index)
+            
+        #else compute matrix of correlations between given item and other items, minus missing values
+
+        else:
+
+            similarity_list = []
+            
+            for col in comparanda.columns:
+                
+                similarity_list.append(1 - distance.cosine(item_ratings, comparanda.loc[:, col]))
+                
+            similarity_vector = DataFrame({'Title': comparanda.columns, 'Similarity': similarity_list, 'Ratings_count': ratings})
+            
+            similarity_vector = similarity_vector.sort_values(by = ["Similarity", "Ratings_count"], ascending = False)
+            
+            similarity_vector = similarity_vector[1:]
+
+            
+        return similarity_vector
+    
+    
+    def recommend_items(self, item_name: str, similarity_metric: str = "cos", approach: str = "collab", weight: float = 0.5, cutoff: int = 100) -> DataFrame:
 
         """
 
         Returns ordered list of recommended items based on a given seed item, algorithm (collaborative filter, content-based, etc.), and distance metric.
 
         :param item_name: name of item to use a seed
-        :param distance_metric: method by which similarity is calculated
+        :param similarity_metric: method by which similarity is calculated
         :param approach: type of recommender used
         :param weight: weight to be fed into hybrid weighted-average recommender
         :param cutoff: switchpoint to be fed into hybrid switching recommender
 
         """
 
-        
+            
         if approach == "collab":
-            
-            if distance_metric == "corr":
                 
-                return CollaborativeRecommender(self._item_matrix_training, self._ratings)._corr(item_name)
-            
-            elif distance_metric == "cos":
-                
-                return CollaborativeRecommender(self._item_matrix_training, self._ratings)._cosine(item_name)
-            
-            else: raise ValueError("The distance heuristic must be 'corr', for correlation, or 'cos', for cosine similarity.")
+            return CollaborativeRecommender._recommend_items(self, item_name, similarity_metric)
 
-            
         elif approach == "content":
-            
-            if distance_metric == "corr":
                 
-                return ContentRecommender(self._latent_content_features, self._content_ratings)._corr(item_name)
-            
-            elif distance_metric == "cos":
-                
-                return ContentRecommender(self._latent_content_features, self._content_ratings)._cosine(item_name)
-            
-            else: raise ValueError("The distance heuristic must be 'corr', for correlation, or 'cos', for cosine similarity.")
+            return ContentRecommender._recommend_items(self, item_name, similarity_metric)
 
-            
         elif approach == "weighted":
-            
-            if distance_metric == "corr":
-                
-                return WeightedRecommender(self._item_matrix, self._ratings, self._latent_content_features, self._content_ratings)._corr(item_name)
-            
-            elif distance_metric == "cos":
-                
-                return WeightedRecommender(self._item_matrix, self._ratings, self._latent_content_features, self._content_ratings)._cosine(item_name)
-            
-            else: raise ValueError("The distance heuristic must be 'corr', for correlation, or 'cos', for cosine similarity.")
 
+            return WeightedRecommender._recommend_items(self, item_name, weight, similarity_metric)
             
         elif approach == "switch":
             
-            if distance_metric == "corr":
-                
-                return SwitchRecommender(self._item_matrix, self._ratings, self._latent_content_features, self._content_ratings)._corr(item_name)
-            
-            elif distance_metric == "cos":
-                
-                return SwitchRecommender(self._item_matrix, self._ratings, self._latent_content_features, self._content_ratings)._cosine(item_name)
-            
-            else: raise ValueError("The distance heuristic must be 'corr', for correlation, or 'cos', for cosine similarity.")
-
+            return SwitchRecommender._recommend_items(self, item_name, cutoff, similarity_metric)
             
         else: raise ValueError("Recommendation algorithm must be 'collab' for collaborative, 'content' for content, 'weighted' for weighted, or 'switch' for switch.")
 
@@ -300,21 +348,26 @@ class Recommender:
             MAP = sum(userAPs)/usercount
             return [MAP, usercount]
         else: return "None"
-                
+
+        
     def average_precision(self, recs: DataFrame, user_Data: DataFrame) -> float:
 
         """
         
-        Returns average precision for the recommendation list stemming from a seed item that was liked by a user.
+        Computes the average precision of the recommendation list that was generated in response to a seed item that was liked by a held out user.
 
         :param recs: dataframe of recommendations
-        :param user_Data: the Series of user ratings for the pertinent movie
+        :param user_Data: series of user ratings for different items
 
         """
 
+        
         user = user_Data
         
         precisions = []
+
+
+        #take precision for top recommended item, then top two items, then top three, up to the length of the recommendation list
         
         for i in range(1, len(recs)+1):
 
@@ -323,218 +376,205 @@ class Recommender:
             precision: float = sum(user[itId] for itId in top_i_recs)/i
             
             precisions.append(precision)
+
+
+        #average the precisions
             
         a_prec = sum(precisions)/len(recs)
+
         
         return a_prec
 
-class CollaborativeRecommender(Recommender):
-    """defines recommender that calculates similarity to an item based on which other item has the most similar set of user ratings"""
-
-    def __init__(self, users_items: DataFrame, ratings: DataFrame):
-        """
-        :param users_items: matrix of user ratings of items
-        :param ratings: matrix with mean ratings and ratings count
-        """
-        
-        self._item_matrix: DataFrame = users_items
-        self._ratings: DataFrame = ratings
-            
-    def _corr(self, item_name: str) -> pd.Series:
-        """returns an item's correlation with all other items 
-        :param item_name: name of item
-        """
-
-        #vector of ratings for given item
-        item_ratings = self._item_matrix[item_name]
-        
-        if (item_ratings == 2.5).all(): #in case the entire vector is NaN
-            
-            similarity_vector = DataFrame({'Title': self._item_matrix.columns, 'Ratings_count': self._ratings['Number_of_ratings']})
-            similarity_vector['Similarity'] = pd.Series([0 for x in range(len(similarity_vector.index))], index = similarity_vector.index)
-            
-        else:
-            
-            #matrix of correlations between given item and other items, minus missing values
-            similarity_vector = DataFrame({'Title': self._item_matrix.columns, 'Similarity': self._item_matrix.corrwith(item_ratings), 'Ratings_count': self._ratings['Number_of_ratings']})
-            similarity_vector = similarity_vector.sort_values(by = ["Similarity", "Ratings_count"], ascending = False)
-            similarity_vector = similarity_vector[1:]
-        
-        return similarity_vector
-
-    def _cosine(self, item_name: str) -> pd.Series:
-        """returns an item's cosine-similarity with all other items
-        :param item_name: name of item
-        """
-
-        item_ratings = self._item_matrix[item_name]
-        if (item_ratings == 2.5).all():
-            similarity_vector = DataFrame({'Title': self._item_matrix.columns, 'Ratings_count': self._ratings['Number_of_ratings']})
-            similarity_vector['Similarity'] = pd.Series([0 for x in range(len(similarity_vector.index))], index = similarity_vector.index)
-        else:    
-            #matrix of cosine similarities between given item and other items
-            similarity_list = []
-            for col in self._item_matrix.columns:
-                similarity_list.append(1 - distance.cosine(item_ratings, self._item_matrix.loc[:, col]))
-            similarity_vector = DataFrame({'Title': self._item_matrix.columns, 'Similarity': similarity_list, 'Ratings_count': self._ratings['Number_of_ratings']})
-            similarity_vector = similarity_vector.sort_values(by = ["Similarity", "Ratings_count"], ascending = False)
-            similarity_vector = similarity_vector[1:]
-
-        return similarity_vector
-
-class ContentRecommender(Recommender):
-    """defines recommender that calculates similarity to an item based on metadata"""
-
-    #too many arguments -- fix structure?
-    def __init__(self, latent_matrix: DataFrame, ratings: DataFrame, title: str = "title", metadata: str = "metadata"):
-        """
-        :param df3: dataframe
-        """
-        self._item_matrix: DataFrame = latent_matrix
-        self._ratings: DataFrame = ratings
-        self._metadata: str = metadata
-        self._title: str = title
-
-    def _corr(self, item_name: str) -> pd.Series:
-        """returns an item's correlation with all other items
-        :param item_name: name of item
-        """
-
-        #vector of ratings for given item
-        item_values = self._item_matrix[item_name]
-        
-        #matrix of correlations between given item and other items, minus missing values
-        similarity_vector = DataFrame({'Title': self._item_matrix.columns, 'Similarity': self._item_matrix.corrwith(item_values), 'Ratings_count': self._ratings})
-        similarity_vector = similarity_vector.sort_values(by = ["Similarity", "Ratings_count"], ascending = False)
-        similarity_vector = similarity_vector[1:]
-        
-        return similarity_vector
-
-    def _cosine(self, item_name: str) -> pd.Series:
-        """returns an item's cosine-similarity with all other items
-        :param item_name: name of item
-        """
-
-        #vector of ratings for given item
-        item_values = self._item_matrix[item_name]
-        
-        #matrix of cosine similarities between given item and other items
-        similarity_list = []
-        for col in self._item_matrix.columns:
-            similarity_list.append(1 - distance.cosine(item_values, self._item_matrix[col]))
-        similarity_vector = DataFrame({'Title': self._item_matrix.columns, 'Similarity': similarity_list, 'Ratings_count': self._ratings})
-        similarity_vector = similarity_vector.sort_values(by = ["Similarity", "Ratings_count"], ascending = False)
-        similarity_vector = similarity_vector[1:]
-        
-        return similarity_vector
-
-class WeightedRecommender(Recommender):
-    """defines recommender that calculates similarity based on a weighted average of content and collaborative recommendation"""
-
-    def __init__(self, users_items: DataFrame, ratings: DataFrame, latent_cont_matrix: DataFrame, cont_ratings: DataFrame, alpha: float = 0.375):
-        """
-        :params: params of CollaborativeRecommender and ContentRecommender
-        :param alpha: the averaging weight, i.e. how much relative emphasis is put on collaborative recommender
-        """
-
-        self._users_items: DataFrame = users_items
-        self._ratings: DataFrame = ratings
-
-        self._latent_cont_matrix: DataFrame = latent_cont_matrix
-        self._cont_ratings: DataFrame = cont_ratings
-
-        self._alpha = alpha
-
-    def _corr(self, item_name: str) -> pd.Series:
-        """returns an item's weighted average correlation with all other items
-        :param item_name: name of item
-        """
-        #boot up collab/content rec lists
-        collabrec: DataFrame = CollaborativeRecommender(self._users_items, self._ratings)._corr(item_name).sort_values(by = "Title", ascending = False)
-        contrec: DataFrame = ContentRecommender(self._latent_cont_matrix, self._cont_ratings)._corr(item_name).sort_values(by = "Title", ascending = False)
-
-        #then average
-        similarity_vector = DataFrame({'Title': collabrec["Title"], 'Similarity': alpha*collabrec["Similarity"] + (1 - alpha)*contrec["Similarity"], 'Ratings_count': self._ratings})
-        similarity_vector = similarity_vector.sort_values(by = ["Similarity", "Ratings_count"], ascending = False)
-        return similarity_vector
     
-    def _cosine(self, item_name: str) -> pd.Series:
-        """returns an item's weighted average cosine-similarity with all other items
-        :param item_name: name of item
-        """
-        #boot up collab/content rec lists
-        collabrec: DataFrame = CollaborativeRecommender(self._users_items, self._ratings)._cosine(item_name).sort_values(by = "Title", ascending = False)
-        contrec: DataFrame = ContentRecommender(self._latent_cont_matrix, self._cont_ratings)._cosine(item_name).sort_values(by = "Title", ascending = False)
-        contrec.index = contrec["Title"] #fix patch
+class CollaborativeRecommender(Recommender):
 
-        #then average
-        similarity_vector = DataFrame({'Title': collabrec["Title"], 'Similarity': self._alpha*collabrec["Similarity"] + (1 - self._alpha)*contrec["Similarity"], 'Ratings_count': collabrec["Ratings_count"]})
-        similarity_vector = similarity_vector.sort_values(by = ["Similarity", "Ratings_count"], ascending = False)   
-        return similarity_vector
+    """
+
+    Class defining recommender architecture that recommends items with similar user ratings to a seed item. Inherits attributes from base class.
+
+    """
+
+    
+    def _recommend_items(self, seed_item_name: str, similarity_metric: str = "cos"):
+    
+        """
+
+        Returns list of items ordered based on how similar they are to the seed item, calculated in terms of user ratings -- i.e., by-item collaborative filtering. Allows input for similarity metric.
+
+        :param item_name: name of item
+        :param similarity_metric: metric to be used to calculate similarity between vectors (either correlation or cosine simiarity)
+
+        """
+
+        
+        #return ordered list of items based on how similar they are to the seed item, for given similarity metric (cosine or corr)
+        #raise value error if an appropriate similarity metric is not provided
+        
+        if similarity_metric == "cos":
+
+            return self.cosine(seed_item_name, self.item_matrix_training, self.ratings['Number_of_ratings'])
+
+        elif similarity_metric == "corr":
+
+            return self.corr(seed_item_name, self.item_matrix_training, self.ratings['Number_of_ratings'])
+
+        else: raise ValueError("The similarity metric must be 'corr', for correlation, or 'cos', for cosine similarity.")   
+
+    
+class ContentRecommender(Recommender):
+
+    """
+
+    Class defining recommender architecture that recommends items with similar metadata to a seed item. Inherits attributes from base class.
+
+    """
+
+    
+    def _recommend_items(self, seed_item_name: str, similarity_metric: str = "cos"):
+    
+        """
+
+        Returns list of items ordered based on how similar they are to the seed item, calculated in terms of latent features in the metadata. Allows input for similarity metric.
+
+        :param item_name: name of item
+        :param similarity_metric: metric to be used to calculate similarity between vectors (either correlation or cosine simiarity)
+
+        """
+
+        
+        #return ordered list of items based on how similar they are to the seed item, for given similarity metric (cosine or corr)
+        #raise value error if an appropriate similarity metric is not provided
+        
+        if similarity_metric == "cos":
+
+            return self.cosine(seed_item_name, self.latent_content_features, self.content_ratings)
+
+        elif similarity_metric == "corr":
+
+            return self.corr(seed_item_name, self.latent_content_features, self.content_ratings)
+
+        else: raise ValueError("The similarity metric must be 'corr', for correlation, or 'cos', for cosine similarity.")
+
+    
+class WeightedRecommender(Recommender):
+
+    """
+
+    Class defining recommender architecture that recommends items based on a weighted average between content and collaborative recommendation.
+
+    """
+    
+
+    def _recommend_items(self, seed_item_name: str, alpha: float, similarity_metric: str = "cos"):
+    
+        """
+
+        Returns list of items ordered based on how similar they are to the seed item, calculated by a weighted average between the similarity scores determined by collaborative filtering and those determined by content recommendation. Allows input for similarity metric.
+
+        :param item_name: name of item
+        :param alpha: the averaging weight, i.e. how much relative emphasis is put on the collaborative recommender
+        :param similarity_metric: metric to be used to calculate similarity between vectors (either correlation or cosine simiarity)
+
+        """
+
+        
+        #compute weighted average between similarity values determined by collaborative filtering and those determined by content recommendation;
+        #raise value error if an appropriate similarity metric is not provided
+        
+        if similarity_metric == "cos":
+
+            collabrecs = self.cosine(seed_item_name, self.item_matrix_training, self.ratings['Number_of_ratings']).sort_values(by = "Title", ascending = False)
+
+            print(collabrecs)
+
+            contentrecs = self.cosine(seed_item_name, self.latent_content_features, self.content_ratings).sort_values(by = "Title", ascending = False)
+
+            print(contentrecs)
+
+            weighted_average_recs: DataFrame = DataFrame({'Title': collabrecs["Title"], 'Similarity': alpha*collabrecs["Similarity"] + (1 - alpha)*contentrecs["Similarity"], 'Ratings_count': collabrecs["Ratings_count"]})
+
+            return weighted_average_recs.sort_values(by = ["Similarity", "Ratings_count"], ascending = False) 
+
+        elif similarity_metric == "corr":
+
+            collabrecs = self.corr(seed_item_name, self.item_matrix_training, self.ratings['Number_of_ratings']).sort_values(by = "Title", ascending = False)
+
+            print(collabrecs)
+
+            contentrecs = self.corr(seed_item_name, self.latent_content_features, self.content_ratings).sort_values(by = "Title", ascending = False)
+
+            print(contentrecs)
+
+            weighted_average_recs: DataFrame = DataFrame({'Title': collabrecs["Title"], 'Similarity': alpha*collabrecs["Similarity"] + (1 - alpha)*contentrecs["Similarity"], 'Ratings_count': collabrecs["Ratings_count"]})
+
+            return weighted_average_recs.sort_values(by = ["Similarity", "Ratings_count"], ascending = False) 
+
+        else: raise ValueError("The similarity metric must be 'corr', for correlation, or 'cos', for cosine similarity.")
+
 
 class SwitchRecommender(Recommender):
-    """defines architecture that switches from content to collaborative recommendation after seed has enough ratings"""
+
+    """
+
+    Defines recommender that switches from content to collaborative recommendation if the seed item has a number of ratings above a specified cutoff.
+
+    """
+
     
-    def __init__(self, users_items: DataFrame, ratings: DataFrame, latent_cont_matrix: DataFrame, cont_ratings: DataFrame, cutoff: int = 100):
-        """
-        :params: params of CollaborativeRecommender and ContentRecommender
-        :param cutoff: number of ratings for seed movie needed to switch from default content to collaborative method
-        """
-
-        self._users_items: DataFrame = users_items
-        self._ratings: DataFrame = ratings
-
-        self._latent_cont_matrix: DataFrame = latent_cont_matrix
-        self._cont_ratings: DataFrame = cont_ratings
-
-        self._cutoff = cutoff
-
-    def _corr(self, item_name: str) -> pd.Series:
-        """returns an item's correlation with all other items under switching regime
-        :param item_name: name of item
-        """
-
-        #if you're past the cutoff, return the collaborative list
-        if self._ratings["Number_of_ratings"][item_name] > self._cutoff:
-            collabrec: DataFrame = CollaborativeRecommender(self._users_items, self._ratings)._corr(item_name).sort_values(by = "Similarity", ascending = False)
-            similarity_vector = DataFrame({'Title': collabrec["Title"], 'Similarity': collabrec["Similarity"], 'Ratings_count': collabrec["Ratings_count"]})
-            similarity_vector = similarity_vector.sort_values(by = ["Similarity", "Title"], ascending = False)
-            return similarity_vector
-
-        #else, content list
-        else:
-            contrec: DataFrame = ContentRecommender(self._users_items, self._ratings)._corr(item_name).sort_values(by = "Similarity", ascending = False)
-            contrec.index = contrec["Title"] #fix patch
-            similarity_vector = DataFrame({'Title': contrec["Title"], 'Similarity': contrec["Similarity"], 'Ratings_count': contrec["Ratings_count"]})
-            similarity_vector = similarity_vector.sort_values(by = ["Similarity", "Ratings_count"], ascending = False)
-            return similarity_vector
+    def _recommend_items(self, seed_item_name: str, cutoff: int, similarity_metric: str = "cos"):
     
-    def _cosine(self, item_name: str) -> pd.Series:
-        """returns an item's cosine-similarity with all other items under switching regime
-        :param item_name: name of item
         """
 
-        #if you're past the cutoff, return the collaborative list
-        if self._ratings["Number_of_ratings"][item_name] > self._cutoff:
-            collabrec: DataFrame = CollaborativeRecommender(self._users_items, self._ratings)._cosine(item_name)
-            similarity_vector = DataFrame({'Title': collabrec["Title"], 'Similarity': collabrec["Similarity"], 'Ratings_count': collabrec["Ratings_count"]})
-            similarity_vector = similarity_vector.sort_values(by = ["Similarity", "Title"], ascending = False)
-            return similarity_vector
+        Returns list of items ordered based on how similar they are to the seed item, calculated with latent content features if the seed item has fewer number of ratings than the specified cutoff, else calculated by collaborative filtering. Allows input for similarity metric.
 
-        #else, content list
+        :param item_name: name of item
+        :param cutoff: threshold for determining whether to apply content recommendation or collaborative filtering
+        :param similarity_metric: metric to be used to calculate similarity between vectors (either correlation or cosine simiarity)
+
+        """
+
+        
+        #check if nubmer of ratings of the seed item are above cutoff;
+        #if so, compute list by content recommendation; else, collaborative filtering
+        #raise value error if an appropriate similarity metric is not provided
+        
+        if self.ratings["Number_of_ratings"][seed_item_name] > cutoff:
+
+            if similarity_metric == "cos":
+
+                return self.cosine(seed_item_name, self.latent_content_features, self.content_ratings)
+
+            elif similarity_metric == "corr":
+
+                return self.corr(seed_item_name, self.latent_content_features, self.content_ratings)
+
+            else: raise ValueError("The similarity metric must be 'corr', for correlation, or 'cos', for cosine similarity.")
+
         else:
-            contrec: DataFrame = ContentRecommender(self._latent_cont_matrix, self._cont_ratings)._cosine(item_name)
-            contrec.index = contrec["Title"] #fix patch
-            similarity_vector = DataFrame({'Title': contrec["Title"], 'Similarity': contrec["Similarity"], 'Ratings_count': contrec["Ratings_count"]})
-            similarity_vector = similarity_vector.sort_values(by = ["Similarity", "Ratings_count"], ascending = False)
-            return similarity_vector
+
+            if similarity_metric == "cos":
+
+                return self.cosine(seed_item_name, self.item_matrix_training, self.ratings['Number_of_ratings'])
+
+            elif similarity_metric == "corr":
+
+                return self.corr(seed_item_name, self.item_matrix_training, self.ratings['Number_of_ratings'])
+
+            else: raise ValueError("The similarity metric must be 'corr', for correlation, or 'cos', for cosine similarity.")
+            
         
 def load_movie_data(ratings_data: str = "ratings.csv", movies_data: str = "movies.csv", tags_data: str = "tags.csv"):
-    """loads and combines movie-related datasets (ratings, titles, tags) from the recommender folder, feeds them into RatingsData object        
+
+    """
+
+    Loads and combines movie-related datasets (ratings, titles, tags) from the recommender folder, feeds them into RatingsData object  
+      
     :param ratings_data: .csv file of movie ratings
     :param movies_data: .csv file of movie titles
     :param tags_data: csv file of movie tags
+
     """
+    
 
     #load different movie datasets
     ratings: DataFrame = pd.read_csv(ratings_data)
