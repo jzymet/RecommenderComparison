@@ -1,6 +1,8 @@
 # Comparing hybrid movie recommenders
 
-This was a project that I prepared for admission to a few data science transitional programs—the Fall 2020 session of Insight Data Science, in particular.
+This was a project that I prepared for admission to a few data science transitional programs—the Fall 2020 session of Insight Data Science, in particular. 
+
+I coded up from scratch and compared the performance of four movie recommenders—two simple recommenders, and two hybrid recommenders.
 
 ## Problem
 
@@ -27,6 +29,10 @@ I further show that averaging—used by many data scientists on TDS—performs o
 - The point is to call into question the use of the weighted average in light of the switching approach, particularly when the goal is accuracy-based
 - If recommender A outperforms recommender B at one time and B outperforms A at a later time, then the hypothesis that I raise in light of my results is that it's generally better (at least according to MAP) to switch from A to B at the best time rather than to average them with the best weight
 - And, of course, if A always outperforms B, then just go with A
+
+## Code
+
+See [here](https://github.com/jzymet/recommender/blob/master/recommenders.py).
 
 ## Demo
 
