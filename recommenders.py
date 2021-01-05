@@ -261,19 +261,19 @@ class Recommender:
             
         if approach == "collab":
                 
-            return CollaborativeRecommender._recommend_items(self, item_name, similarity_metric)
+            return CollaborativeRecommender.recommend_items(self, item_name, similarity_metric)
 
         elif approach == "content":
                 
-            return ContentRecommender._recommend_items(self, item_name, similarity_metric)
+            return ContentRecommender.recommend_items(self, item_name, similarity_metric)
 
         elif approach == "weighted":
 
-            return WeightedRecommender._recommend_items(self, item_name, similarity_metric, weight)
+            return WeightedRecommender.recommend_items(self, item_name, similarity_metric, weight)
             
         elif approach == "switch":
             
-            return SwitchRecommender._recommend_items(self, item_name, similarity_metric, cutoff)
+            return SwitchRecommender.recommend_items(self, item_name, similarity_metric, cutoff)
             
         else: raise ValueError("Recommendation algorithm must be 'collab' for collaborative, 'content' for content, 'weighted' for weighted, or 'switch' for switch.")
 
@@ -522,21 +522,30 @@ class WeightedRecommender(Recommender):
         """
 
         
-        #compute weighted average between similarity values determined by collaborative filtering and those determined by content recommendation;
+        #compute weighted average between similarity values determined by collaborative filtering and those determined by content recommendation
+        #("why is reset_index applied to the component reclists?" needed to properly compute the weighted average of the content/collaborative similarities for each item)
         #raise value error if an appropriate similarity metric is not provided
         
         if similarity_metric == "cos":
 
-            collabrecs: DataFrame = self.cosine(seed_item_name, self.item_matrix_training)
-            contentrecs:DataFrame = self.cosine(seed_item_name, self.latent_content_features).sort_values(by = "Title", ascending = False)
+            collabrecs: DataFrame = self.cosine(seed_item_name, self.item_matrix_training).sort_values(by = "Title", ascending = False)
+            collabrecs.reset_index(drop=True, inplace=True)
+   
+            contentrecs: DataFrame = self.cosine(seed_item_name, self.latent_content_features).sort_values(by = "Title", ascending = False)
+            contentrecs.reset_index(drop=True, inplace=True)
+
             weighted_average_recs: DataFrame = DataFrame({'Title': collabrecs["Title"], 'Similarity': weight*collabrecs["Similarity"] + (1 - weight)*contentrecs["Similarity"], 'Ratings_count': collabrecs["Ratings_count"]})
 
             return weighted_average_recs.sort_values(by = ["Similarity", "Ratings_count"], ascending = False) 
 
         elif similarity_metric == "corr":
 
-            collabrecs: DataFrame = self.corr(seed_item_name, self.item_matrix_training).sort_values(by = "Title", ascending = False)
-            contentrecs: DataFrame = self.corr(seed_item_name, self.latent_content_features).sort_values(by = "Title", ascending = False)
+            collabrecs: DataFrame = self.corr(seed_item_name, self.item_matrix_training)
+            collabrecs.reset_index(drop=True, inplace=True)
+                        
+            contentrecs: DataFrame = self.corr(seed_item_name, self.latent_content_features)
+            contentrecs.reset_index(drop=True, inplace=True)
+            
             weighted_average_recs: DataFrame = DataFrame({'Title': collabrecs["Title"], 'Similarity': weight*collabrecs["Similarity"] + (1 - weight)*contentrecs["Similarity"], 'Ratings_count': collabrecs["Ratings_count"]})
 
             return weighted_average_recs.sort_values(by = ["Similarity", "Ratings_count"], ascending = False) 
@@ -553,7 +562,7 @@ class SwitchRecommender(Recommender):
     """
 
     
-    def recommend_items(self, seed_item_name: str, similarity_metric: str, cutoff: int,):
+    def recommend_items(self, seed_item_name: str, similarity_metric: str, cutoff: int):
     
         """
 
