@@ -15,7 +15,7 @@ class Recommender:
     
     """
 
-    Class containing collaborative, content, hybrid weighted-average, and hybrid switching recommenders as subclasses.
+    Class defining recommender attriutes and helper functions, and containing collaborative, content, hybrid weighted-average, and hybrid switching recommender architectures as subclasses.
     
     """
 
