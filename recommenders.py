@@ -439,7 +439,7 @@ class CollaborativeRecommender(Recommender):
     """
 
     
-    def _recommend_items(self, seed_item_name: str, similarity_metric: str = "cos"):
+    def recommend_items(self, seed_item_name: str, similarity_metric: str = "cos"):
     
         """
 
@@ -474,7 +474,7 @@ class ContentRecommender(Recommender):
     """
 
     
-    def _recommend_items(self, seed_item_name: str, similarity_metric: str = "cos"):
+    def recommend_items(self, seed_item_name: str, similarity_metric: str = "cos"):
     
         """
 
@@ -509,7 +509,7 @@ class WeightedRecommender(Recommender):
     """
     
 
-    def _recommend_items(self, seed_item_name: str, similarity_metric: str, weight: float):
+    def recommend_items(self, seed_item_name: str, similarity_metric: str, weight: float):
     
         """
 
@@ -542,6 +542,53 @@ class WeightedRecommender(Recommender):
             return weighted_average_recs.sort_values(by = ["Similarity", "Ratings_count"], ascending = False) 
 
         else: raise ValueError("The similarity metric must be 'corr', for correlation, or 'cos', for cosine similarity.")
+
+
+class SwitchRecommender(Recommender):
+
+    """
+
+    Defines recommender that switches from content-based recommendation to collaborative filtering if the seed item has a number of ratings above a specified cutoff.
+
+    """
+
+    
+    def recommend_items(self, seed_item_name: str, similarity_metric: str, cutoff: int,):
+    
+        """
+
+        Returns list of items ordered based on how similar they are to the seed item, calculated with latent content features if the seed item has fewer number of ratings than the specified cutoff, else calculated by collaborative filtering. Allows input for similarity metric.
+
+        :param item_name: name of item
+        :param cutoff: threshold for determining whether to apply content recommendation or collaborative filtering
+        :param similarity_metric: metric to be used to calculate similarity between vectors (either correlation or cosine simiarity)
+
+        """
+
+        
+        #check if nubmer of ratings of the seed item is less than specified cutoff;
+        #if so, compute list by content-based recommendation; else, collaborative filtering
+        #raise value error if an appropriate similarity metric is not provided
+        
+        if self.ratings["Number_of_ratings"][seed_item_name] < cutoff:
+            
+            if similarity_metric == "cos":
+                return self.cosine(seed_item_name, self.latent_content_features)
+
+            elif similarity_metric == "corr":
+                return self.corr(seed_item_name, self.latent_content_features)
+
+            else: raise ValueError("The similarity metric must be 'corr', for correlation, or 'cos', for cosine similarity.")
+
+        else:
+
+            if similarity_metric == "cos":
+                return self.cosine(seed_item_name, self.item_matrix_training)
+
+            elif similarity_metric == "corr":
+                return self.corr(seed_item_name, self.item_matrix_training)
+
+            else: raise ValueError("The similarity metric must be 'corr', for correlation, or 'cos', for cosine similarity.")
 
             
     ########################
