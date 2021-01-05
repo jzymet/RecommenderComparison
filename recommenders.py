@@ -157,7 +157,7 @@ class Recommender:
     #################################################
 
     
-    def corr(self, item_name: str, comparanda: DataFrame) -> pd.Series:
+    def corr(self, item_name: str, comparanda: DataFrame) -> DataFrame:
 
         """
 
@@ -194,7 +194,7 @@ class Recommender:
         return similarity_vector
 
     
-    def cosine(self, item_name: str, comparanda: DataFrame) -> pd.Series:
+    def cosine(self, item_name: str, comparanda: DataFrame) -> DataFrame:
 
         """
 
@@ -439,7 +439,7 @@ class CollaborativeRecommender(Recommender):
     """
 
     
-    def recommend_items(self, seed_item_name: str, similarity_metric: str = "cos"):
+    def recommend_items(self, seed_item_name: str, similarity_metric: str) -> DataFrame:
     
         """
 
@@ -474,7 +474,7 @@ class ContentRecommender(Recommender):
     """
 
     
-    def recommend_items(self, seed_item_name: str, similarity_metric: str = "cos"):
+    def recommend_items(self, seed_item_name: str, similarity_metric: str) -> DataFrame:
     
         """
 
@@ -509,7 +509,7 @@ class WeightedRecommender(Recommender):
     """
     
 
-    def recommend_items(self, seed_item_name: str, similarity_metric: str, weight: float):
+    def recommend_items(self, seed_item_name: str, similarity_metric: str, weight: float) -> DataFrame:
     
         """
 
@@ -562,7 +562,7 @@ class SwitchRecommender(Recommender):
     """
 
     
-    def recommend_items(self, seed_item_name: str, similarity_metric: str, cutoff: int):
+    def recommend_items(self, seed_item_name: str, similarity_metric: str, cutoff: int) -> DataFrame:
     
         """
 
