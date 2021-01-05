@@ -42,7 +42,7 @@ def test_recommender():
     
     
     ###recommendations via hybrid weighted average in response to Toy Story
-    ###set weight to 1 and notice that we get the collaborative filter's recommendations; set to 0 and we get content-based recommendations; set at e.g. 0.7 and we see something of a blend
+    ###set weight to 1 and notice that we get the collaborative filter's recommendations; set to 0 and we get content-based recommendations; set at e.g. 0.7 and weget something of a blend
     
     print("Weighted (weight = 1): Toy Story")
     print()
