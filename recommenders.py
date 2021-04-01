@@ -58,9 +58,10 @@ class Recommender:
         self.item_matrix_test: DataFrame = split_item_matrices[1]
 
 
-        #fill missing values in training set with median rating. FOR FUTURE: replace with a better strategy? e.g., estimate the missing numbers.
+        #fill missing values in training set with median rating.
+        #FOR FUTURE: replace with a better strategy? e.g., estimate the missing numbers.
         
-        self.item_matrix_training.fillna(2.5, inplace = True)
+        self.item_matrix_training.fillna(self.item_matrix_training.median(), inplace = True)
 
         
         #matrix with items as rows and with mean ratings and rating count as cols
